@@ -1,10 +1,10 @@
 /*
  * Wiring:
  *
- *      
+ *
  *      -G-
  *  E |     | F
- *      -D- 
+ *      -D-
  *  A |     | C
  *  	-B-  .DP
  *
@@ -24,64 +24,67 @@
 
 #define ARM_IO_BASE 		0x20000000
 #define ARM_GPIO_BASE 		(ARM_IO_BASE + 0x200000)
-//#define GPLEV0 			(ARM_GPIO_BASE + 0x34)
-//#define GPFSEL1			(ARM_GPIO_BASE + 0x04)
-#define GPLEV0				13
-#define GPLEV1				14
-#define GPSET0				7
-#define GPSET1				8
-#define GPCLR0				10
-#define GPCLR1				11
+//#define OFFSET_GPLEV0 	(ARM_GPIO_BASE + 0x34)
+//#define OFFSET_GPFSEL1	(ARM_GPIO_BASE + 0x04)
+#define OFFSET_GPLEV0		13
+#define OFFSET_GPSET0		7
+#define OFFSET_GPCLR0		10
+#define OFFSET_GPFSEL0      0
+#define OFFSET_GPFSEL1      1
+#define OFFSET_GPFSEL2      2
 
-struct gpio_pin_info {
-	int line;
-	int pin;
-};
+#define OFFSET_PIN_A        17
+#define OFFSET_PIN_B        18
+#define OFFSET_PIN_C        27
+#define OFFSET_PIN_D        23
+#define OFFSET_PIN_E        24
+#define OFFSET_PIN_F        4
+#define OFFSET_PIN_G        25
+#define OFFSET_PIN_DP       22
 
-struct gpio_pin_info GPIO_0 = {0, 6};
-struct gpio_pin_info GPIO_1 = {1, 6};
-struct gpio_pin_info GPIO_2 = {0, 7};
-struct gpio_pin_info GPIO_3 = {0, 8};
-struct gpio_pin_info GPIO_4 = {1, 8};
-struct gpio_pin_info GPIO_5 = {1, 9};
-struct gpio_pin_info GPIO_6 = {1, 11};
-struct gpio_pin_info GPIO_7 = {0, 4};
-/*
- * struct gpio_pin_info GPIO_21 = {0, 15};
- * struct gpio_pin_info GPIO_22 = {0, 16};
- * struct gpio_pin_info GPIO_23 = {0, 17};
- * struct gpio_pin_info GPIO_24 = {0, 18};
- * struct gpio_pin_info GPIO_25 = {0, 19};
- * struct gpio_pin_info GPIO_26 = {1, 16};
- * struct gpio_pin_info GPIO_27 = {1, 18};
- * struct gpio_pin_info GPIO_28 = {1, 19};
- * struct gpio_pin_info GPIO_29 = {1, 20};
-*/
+#define BIT_A               (1<<OFFSET_PIN_A)
+#define BIT_B               (1<<OFFSET_PIN_B)
+#define BIT_C               (1<<OFFSET_PIN_C)
+#define BIT_D               (1<<OFFSET_PIN_D)
+#define BIT_E               (1<<OFFSET_PIN_E)
+#define BIT_F               (1<<OFFSET_PIN_F)
+#define BIT_G               (1<<OFFSET_PIN_G)
+#define BIT_DP              (1<<OFFSET_PIN_DP)
 
-struct sseg_num_conf {
-	int num;
-	struct gpio_pin_info* pins[];
-};
-
-struct sseg_num_conf sseg_zero = {0, {}};
-struct sseg_num_conf sseg_one = {0, {&GPIO_7, &GPIO_2}};
+#define BITS_ZERO           (BIT_A|BIT_B|BIT_C|BIT_F|BIT_G|BIT_E)
+#define BITS_ONE            (BIT_C|BIT_F)
+#define BITS_TWO            (BIT_A|BIT_B|BIT_D|BIT_F|BIT_G)
+#define BITS_THREE          (BITS_ONE|BIT_B|BIT_D|BIT_G)
+#define BITS_FOUR           (BITS_ONE|BIT_D|BIT_E)
+#define BITS_FIVE           (BIT_B|BIT_C|BIT_D|BIT_E|BIT_G)
+#define BITS_SIX            (BIT_A|BIT_B|BIT_C|BIT_D|BIT_E)
+#define BITS_SEVEN          (BITS_ONE|BIT_G)
+#define BITS_EIGHT          (BITS_ZERO|BIT_D)
+#define BITS_NINE           (BITS_SEVEN|BIT_D|BIT_E)
 
 void gpio_write(volatile uint32_t* map, int offset, int n) {
-	*(map+offset) |= (1<<n);
+	*(map+offset) = n;
 }
-
-#define GBS(n) (1<<n)
 
 void gpio_clear(volatile uint32_t* map) {
-	*(map+GPCLR0) |= ~(GBS(4)|GBS(6)|GBS(7)|GBS(8));
-	*(map+GPCLR1) |= ~(GBS(6)|GBS(8)|GBS(9)|GBS(11));
+    *(map+OFFSET_GPCLR0) |= (BIT_A|BIT_B|BIT_C|BIT_D|BIT_E|BIT_F|BIT_G|BIT_DP);
 }
 
-uint32_t gpio_read(volatile uint32_t* map, int offset, int n) {
-	return  *(map+offset) & (1<<n);
+uint32_t gpio_read(volatile uint32_t* map, int offset, int pin) {
+	return  *(map+offset) & (1<<pin);
 }
 
-int main() {	
+void gpio_set_output_mode(volatile uint32_t* map) {
+// Get the relevant bit for the function select register
+// based on pin BCM number
+#define SBIT(n) (1<<n*3)
+    *(map+OFFSET_GPFSEL0) |= SBIT(4);
+    *(map+OFFSET_GPFSEL1) |= (SBIT(7)|SBIT(8));
+    *(map+OFFSET_GPFSEL2) |= (SBIT(2)|SBIT(3)|SBIT(4)|SBIT(5)|SBIT(7));
+#undef SBIT
+}
+
+int main() {
 	volatile uint32_t* map = MAP_FAILED;
 	int fd;
 	uint32_t addr_p =  ARM_GPIO_BASE;
@@ -104,26 +107,47 @@ int main() {
 	close(fd);
 
 	if(map == MAP_FAILED) {
-		printf("MAP_FAILED\n");
 		perror("mmap");
 		return -1;
 	}
 
-	printf("Showing: %d\n", sseg_one.num);
-	gpio_clear(map);
-	return 0;
+    gpio_set_output_mode(map);
 
-	uint32_t v = gpio_read(map, GPLEV0, 4);
-	if(v > 0) {
-		printf("High\n");
-		gpio_write(map, GPCLR0, 4);
-	}
-	else {
-		printf("Low\n");
-		gpio_write(map, GPSET0, 4);
-	}
-
-	printf("v: %u\n", v);
-	printf("v: %x\n", *(map+13));
+    for(int i=0; i<10; i++) {
+        gpio_clear(map);
+        switch(i) {
+            case 0:
+                gpio_write(map, OFFSET_GPSET0, BITS_ZERO);
+                break;
+            case 1:
+                gpio_write(map, OFFSET_GPSET0, BITS_ONE);
+                break;
+            case 2:
+                gpio_write(map, OFFSET_GPSET0, BITS_TWO);
+                break;
+            case 3:
+                gpio_write(map, OFFSET_GPSET0, BITS_THREE);
+                break;
+            case 4:
+                gpio_write(map, OFFSET_GPSET0, BITS_FOUR);
+                break;
+            case 5:
+                gpio_write(map, OFFSET_GPSET0, BITS_FIVE);
+                break;
+            case 6:
+                gpio_write(map, OFFSET_GPSET0, BITS_SIX);
+                break;
+            case 7:
+                gpio_write(map, OFFSET_GPSET0, BITS_SEVEN);
+                break;
+            case 8:
+                gpio_write(map, OFFSET_GPSET0, BITS_EIGHT);
+                break;
+            case 9:
+                gpio_write(map, OFFSET_GPSET0, BITS_NINE|BIT_DP);
+                break;
+        }
+        sleep(1);
+    }
 	return 0;
 }
